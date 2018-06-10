@@ -70,13 +70,7 @@ def get_mail_details(msg):
     except IndexError:
         maildetails.subject = subject
     received_time = msg.get("Date")
-    if received_time.endswith('(CST)'):
-        maildetails.receivedtime = received_time
-    else:
-        time_str_fmt = "%a, %d %b %Y %H:%M:%S %z"
-        time_obj = datetime.strptime(received_time, time_str_fmt)
-        time_obj = time_obj.astimezone(pytz.timezone('Asia/Hong_Kong'))
-        maildetails.receivedtime = time_obj.strftime(time_str_fmt)
+    maildetails.receivedtime = received_time
 
     parts = msg.get_payload()
     content_charset = parts[0].get_content_charset()
