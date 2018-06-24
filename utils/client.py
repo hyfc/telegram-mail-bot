@@ -43,10 +43,10 @@ class EmailClient(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is None:
-            print('exited normally\n')
+            logger.info('exited normally\n')
             self.server.quit()
         else:
-            print('raise an exception! ' + str(exc_type))
+            logger.error('raise an exception! ' + str(exc_type))
             self.server.close()
             return False # Propagate
 
