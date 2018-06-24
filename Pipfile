@@ -6,8 +6,10 @@ name = "pypi"
 [packages]
 pytz = "*"
 python-telegram-bot = "*"
+pyzmail36 = "*"
 
 [dev-packages]
+pylint = "*"
 
 [requires]
 python_version = "3.6"
