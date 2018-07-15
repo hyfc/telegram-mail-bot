@@ -1,10 +1,10 @@
 import logging
 import os
-
-from utils.client import EmailClient
+import schedule
 from telegram import ParseMode
 from telegram.constants import MAX_MESSAGE_LENGTH
 from telegram.ext import (Updater, CommandHandler)
+from utils.client import EmailClient
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -40,16 +40,25 @@ def _help(bot, update):
                     text=help_str)
 
 def setting_email(bot, update, args):
-    global email_addr, email_passwd
+    global email_addr, email_passwd, inbox_num
     email_addr = args[0]
     email_passwd = args[1]
 
     update.message.reply_text("Configure email success!")
+    with EmailClient(email_addr, email_passwd) as client:
+        inbox_num = client.get_mails_count()
+    schedule.every(10).minutes.do(periodic_task, bot, update)
+
+def periodic_task(bot, update):
+    with EmailClient(email_addr, email_passwd) as client:
+        new_inbox_num = client.get_mails_count()
+    if new_inbox_num > inbox:
+        get_email(bot, update, new_inbox_num)
 
 def inbox(bot, update):
     with EmailClient(email_addr, email_passwd) as client:
-        num_of_mails = client.get_mails_count()
-        reply_text = "The index of newest mail is *%d*" % num_of_mails
+        inbox_num = client.get_mails_count()
+        reply_text = "The index of newest mail is *%d*" % inbox_num
         bot.send_message(update.message.chat_id,
                         parse_mode=ParseMode.MARKDOWN,
                         text=reply_text)
@@ -87,6 +96,8 @@ def main():
 
     # Start the Bot
     updater.start_polling()
+
+    schedule.run_pending()
 
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
