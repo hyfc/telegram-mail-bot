@@ -1,13 +1,13 @@
 import logging
 import os
-import schedule
 from telegram import ParseMode
 from telegram.constants import MAX_MESSAGE_LENGTH
 from telegram.ext import (Updater, CommandHandler)
 from utils.client import EmailClient
 
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s:%(lineno)d'
+                           ' - %(message)s', filename='mailbot.log',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def _help(bot, update):
                     parse_mode=ParseMode.MARKDOWN,
                     text=help_str)
 
-def setting_email(bot, update, args):
+def setting_email(bot, update, args, job_queue):
     global email_addr, email_passwd, inbox_num
     email_addr = args[0]
     email_passwd = args[1]
@@ -47,9 +47,11 @@ def setting_email(bot, update, args):
     update.message.reply_text("Configure email success!")
     with EmailClient(email_addr, email_passwd) as client:
         inbox_num = client.get_mails_count()
-    schedule.every(10).minutes.do(periodic_task, bot, update)
+    job_queue.run_repeating(periodic_task, 600)
+
 
 def periodic_task(bot, update):
+    logger.info("entering periodic task.")
     with EmailClient(email_addr, email_passwd) as client:
         new_inbox_num = client.get_mails_count()
     if new_inbox_num > inbox:
@@ -85,7 +87,8 @@ def main():
     dp.add_handler(CommandHandler("help", _help))
     #
     #  Add command handler to set email address and account.
-    dp.add_handler(CommandHandler("setting", setting_email, pass_args=True))
+    dp.add_handler(CommandHandler("setting", setting_email, pass_args=True,
+                                  pass_job_queue=True))
 
     dp.add_handler(CommandHandler("inbox", inbox))
 
@@ -96,8 +99,6 @@ def main():
 
     # Start the Bot
     updater.start_polling()
-
-    schedule.run_pending()
 
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
