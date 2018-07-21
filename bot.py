@@ -7,7 +7,7 @@ from utils.client import EmailClient
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s:%(lineno)d'
-                           ' - %(message)s', filename='mailbot.log',
+                           ' - %(message)s', filename='/var/log/mailbot.log',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -43,10 +43,11 @@ def setting_email(bot, update, args, job_queue):
     global email_addr, email_passwd, inbox_num
     email_addr = args[0]
     email_passwd = args[1]
-
+    logger.info("received setting_email command.")
     update.message.reply_text("Configure email success!")
     with EmailClient(email_addr, email_passwd) as client:
         inbox_num = client.get_mails_count()
+    logger.info("periodic task scheduled.")
     job_queue.run_repeating(periodic_task, 600)
 
 
@@ -58,6 +59,7 @@ def periodic_task(bot, update):
         get_email(bot, update, new_inbox_num)
 
 def inbox(bot, update):
+    logger.info("received inbox command.")
     with EmailClient(email_addr, email_passwd) as client:
         inbox_num = client.get_mails_count()
         reply_text = "The index of newest mail is *%d*" % inbox_num
@@ -67,6 +69,7 @@ def inbox(bot, update):
 
 def get_email(bot, update, args):
     index = args[0]
+    logger.info("received get command.")
     with EmailClient(email_addr, email_passwd) as client:
         mail = client.get_mail_by_index(index)
         content = mail.__repr__()
