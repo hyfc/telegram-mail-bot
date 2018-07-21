@@ -39,30 +39,43 @@ def _help(bot, update):
                     parse_mode=ParseMode.MARKDOWN,
                     text=help_str)
 
-def setting_email(bot, update, args, job_queue):
+def setting_email(bot, update, args, job_queue, chat_data):
     global email_addr, email_passwd, inbox_num
+    chat_id = update.message.chat_id
     email_addr = args[0]
     email_passwd = args[1]
     logger.info("received setting_email command.")
     update.message.reply_text("Configure email success!")
     with EmailClient(email_addr, email_passwd) as client:
         inbox_num = client.get_mails_count()
+    job = job_queue.run_repeating(periodic_task, 120, context=chat_id)
+    chat_data['job'] = job
     logger.info("periodic task scheduled.")
-    job_queue.run_repeating(periodic_task, 600)
 
 
-def periodic_task(bot, update):
+def periodic_task(bot, job):
+    global inbox_num
     logger.info("entering periodic task.")
     with EmailClient(email_addr, email_passwd) as client:
         new_inbox_num = client.get_mails_count()
-    if new_inbox_num > inbox:
-        get_email(bot, update, new_inbox_num)
+        if new_inbox_num > inbox_num:
+            mail = client.get_mail_by_index(new_inbox_num)
+            content = mail.__repr__()
+            for text in handle_large_text(content):
+                bot.send_message(job.context,
+                                text=text)
+            inbox_num = new_inbox_num
 
 def inbox(bot, update):
     logger.info("received inbox command.")
     with EmailClient(email_addr, email_passwd) as client:
-        inbox_num = client.get_mails_count()
-        reply_text = "The index of newest mail is *%d*" % inbox_num
+        global inbox_num
+        new_num = client.get_mails_count()
+        reply_text = "The index of newest mail is *%d*," \
+                     " received *%d* new mails since last" \
+                     " time you checked." % \
+                     (new_num, new_num - inbox_num)
+        inbox_num = new_num
         bot.send_message(update.message.chat_id,
                         parse_mode=ParseMode.MARKDOWN,
                         text=reply_text)
@@ -91,7 +104,7 @@ def main():
     #
     #  Add command handler to set email address and account.
     dp.add_handler(CommandHandler("setting", setting_email, pass_args=True,
-                                  pass_job_queue=True))
+                                  pass_job_queue=True, pass_chat_data=True))
 
     dp.add_handler(CommandHandler("inbox", inbox))
 
