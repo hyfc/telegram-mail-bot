@@ -7,7 +7,7 @@ from utils.client import EmailClient
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s:%(lineno)d'
-                           ' - %(message)s', filename='/tmp/log/mailbot.log',
+                           ' - %(message)s', filename='/var/log/mailbot.log',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
