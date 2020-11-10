@@ -1,13 +1,14 @@
 import logging
 import os
+import sys
 from telegram import ParseMode, Update
 from telegram.constants import MAX_MESSAGE_LENGTH
 from telegram.ext import (Updater, CommandHandler, CallbackContext)
 from utils.client import EmailClient
 
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s:%(lineno)d'
-                           ' - %(message)s', filename='/var/log/mailbot.log',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s:%(lineno)d - %(message)s',
+                    stream=sys.stdout,
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
