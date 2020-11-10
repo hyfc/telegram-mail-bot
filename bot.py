@@ -13,6 +13,11 @@ logger = logging.getLogger(__name__)
 
 bot_token = os.environ['TELEGRAM_TOKEN']
 
+owner_chat_id = int(os.environ['OWNER_CHAT_ID'])
+
+def is_owner(update: Update) -> bool:
+    return update.message.chat_id == owner_chat_id
+
 def handle_large_text(text):
     while text:
         if len(text) < MAX_MESSAGE_LENGTH:
@@ -28,10 +33,15 @@ def error(update: Update, context: CallbackContext) -> None:
     logger.warning('Update "%s" caused error "%s"', update, context.error)
 
 def start_callback(update: Update, context: CallbackContext) -> None:
+    if not is_owner(update):
+        return
     msg = "Use /help to get help"
+    # print(update)
     update.message.reply_text(msg)
 
 def _help(update: Update, context: CallbackContext) -> None:
+    if not is_owner(update):
+        return
     """Send a message when the command /help is issued."""
     help_str = """邮箱设置:
 /setting john.doe@example.com password
@@ -47,6 +57,8 @@ def _help(update: Update, context: CallbackContext) -> None:
                     text=help_str)
 
 def setting_email(update: Update, context: CallbackContext) -> None:
+    if not is_owner(update):
+        return
     global email_addr, email_passwd, inbox_num
     email_addr = context.args[0]
     email_passwd = context.args[1]
@@ -73,6 +85,8 @@ def periodic_task(context: CallbackContext) -> None:
             inbox_num = new_inbox_num
 
 def inbox(update: Update, context: CallbackContext) -> None:
+    if not is_owner(update):
+        return
     logger.info("received inbox command.")
     with EmailClient(email_addr, email_passwd) as client:
         global inbox_num
@@ -87,6 +101,8 @@ def inbox(update: Update, context: CallbackContext) -> None:
                         text=reply_text)
 
 def get_email(update: Update, context: CallbackContext) -> None:
+    if not is_owner(update):
+        return
     index = context.args[0]
     logger.info("received get command.")
     with EmailClient(email_addr, email_passwd) as client:
