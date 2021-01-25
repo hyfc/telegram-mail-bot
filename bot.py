@@ -1,17 +1,23 @@
 import logging
 import os
-from telegram import ParseMode
+import sys
+from telegram import ParseMode, Update
 from telegram.constants import MAX_MESSAGE_LENGTH
-from telegram.ext import (Updater, CommandHandler)
+from telegram.ext import (Updater, CommandHandler, CallbackContext)
 from utils.client import EmailClient
 
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s:%(lineno)d'
-                           ' - %(message)s', filename='/var/log/mailbot.log',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s:%(lineno)d - %(message)s',
+                    stream=sys.stdout,
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 bot_token = os.environ['TELEGRAM_TOKEN']
+
+owner_chat_id = int(os.environ['OWNER_CHAT_ID'])
+
+def is_owner(update: Update) -> bool:
+    return update.message.chat_id == owner_chat_id
 
 def handle_large_text(text):
     while text:
@@ -23,37 +29,50 @@ def handle_large_text(text):
             yield out
             text = text.lstrip(out)
 
-def error(bot, update, _error):
+def error(update: Update, context: CallbackContext) -> None:
     """Log Errors caused by Updates."""
-    logger.warning('Update "%s" caused error "%s"', update, _error)
+    logger.warning('Update "%s" caused error "%s"', update, context.error)
 
-def start_callback(bot, update):
+def start_callback(update: Update, context: CallbackContext) -> None:
+    if not is_owner(update):
+        return
     msg = "Use /help to get help"
+    # print(update)
     update.message.reply_text(msg)
 
-def _help(bot, update):
+def _help(update: Update, context: CallbackContext) -> None:
+    if not is_owner(update):
+        return
     """Send a message when the command /help is issued."""
-    help_str = "*Mailbox Setting*: \n" \
-               "/setting 123456@example.com yourpassword"
-    bot.send_message(update.message.chat_id, 
-                    parse_mode=ParseMode.MARKDOWN,
+    help_str = """邮箱设置:
+/setting john.doe@example.com password
+/inbox
+/get mail_index
+/help get help"""
+    # help_str = "*Mailbox Setting*:\n" \
+    #            "/setting john.doe@example.com password\n" \
+    #            "/inbox\n" \
+    #            "/get mail_index"
+    context.bot.send_message(update.message.chat_id, 
+                    # parse_mode=ParseMode.MARKDOWN,
                     text=help_str)
 
-def setting_email(bot, update, args, job_queue, chat_data):
+def setting_email(update: Update, context: CallbackContext) -> None:
+    if not is_owner(update):
+        return
     global email_addr, email_passwd, inbox_num
-    chat_id = update.message.chat_id
-    email_addr = args[0]
-    email_passwd = args[1]
+    email_addr = context.args[0]
+    email_passwd = context.args[1]
     logger.info("received setting_email command.")
     update.message.reply_text("Configure email success!")
     with EmailClient(email_addr, email_passwd) as client:
         inbox_num = client.get_mails_count()
-    job = job_queue.run_repeating(periodic_task, 120, context=chat_id)
-    chat_data['job'] = job
+    context.job_queue.run_repeating(periodic_task, interval=60, context=update.message.chat_id)
+    # chat_data['job'] = job
     logger.info("periodic task scheduled.")
 
 
-def periodic_task(bot, job):
+def periodic_task(context: CallbackContext) -> None:
     global inbox_num
     logger.info("entering periodic task.")
     with EmailClient(email_addr, email_passwd) as client:
@@ -62,11 +81,13 @@ def periodic_task(bot, job):
             mail = client.get_mail_by_index(new_inbox_num)
             content = mail.__repr__()
             for text in handle_large_text(content):
-                bot.send_message(job.context,
+                context.bot.send_message(context.job.context,
                                 text=text)
             inbox_num = new_inbox_num
 
-def inbox(bot, update):
+def inbox(update: Update, context: CallbackContext) -> None:
+    if not is_owner(update):
+        return
     logger.info("received inbox command.")
     with EmailClient(email_addr, email_passwd) as client:
         global inbox_num
@@ -76,23 +97,26 @@ def inbox(bot, update):
                      " time you checked." % \
                      (new_num, new_num - inbox_num)
         inbox_num = new_num
-        bot.send_message(update.message.chat_id,
+        context.bot.send_message(update.message.chat_id,
                         parse_mode=ParseMode.MARKDOWN,
                         text=reply_text)
 
-def get_email(bot, update, args):
-    index = args[0]
+def get_email(update: Update, context: CallbackContext) -> None:
+    if not is_owner(update):
+        return
+    index = context.args[0]
     logger.info("received get command.")
     with EmailClient(email_addr, email_passwd) as client:
         mail = client.get_mail_by_index(index)
         content = mail.__repr__()
         for text in handle_large_text(content):
-            bot.send_message(update.message.chat_id,
+            context.bot.send_message(update.message.chat_id,
                              text=text)
 
 def main():
     # Create the EventHandler and pass it your bot's token.
-    updater = Updater(token=bot_token)
+    updater = Updater(token=bot_token, use_context=True)
+    print(bot_token)
 
     # Get the dispatcher to register handlers
     dp = updater.dispatcher
@@ -103,12 +127,11 @@ def main():
     dp.add_handler(CommandHandler("help", _help))
     #
     #  Add command handler to set email address and account.
-    dp.add_handler(CommandHandler("setting", setting_email, pass_args=True,
-                                  pass_job_queue=True, pass_chat_data=True))
+    dp.add_handler(CommandHandler("setting", setting_email))
 
     dp.add_handler(CommandHandler("inbox", inbox))
 
-    dp.add_handler(CommandHandler("get", get_email, pass_args=True))
+    dp.add_handler(CommandHandler("get", get_email))
 
 
     dp.add_error_handler(error)
